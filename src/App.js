@@ -10,17 +10,59 @@ import {
   MDBInputGroup,
 } from "mdb-react-ui-kit";
 import { io } from 'socket.io-client';
-const socket = io('http://localhost:4000');
+import { useHotKey } from "./hooks/useHotKey";
+
+function uuidv4() {
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+  );
+}
+const userId = '123';
+const userName = 'hieu';
+const room = 'chat:123';
+
+const socket = io('http://localhost:4000', {
+  auth: {
+    user_id: userId,
+    user_name: userName,
+    room: room,
+  }
+});
 
 export default function App() {
   const inputRef = useRef();
-  const room = 'chat:123';
+  const [chatContent, setChatContent] = useState([
+    {
+      icon_profile: 'https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp',
+      text: 'alo bạn à, tôi mượn xe bạn có chút việc',
+      time: '12:00PM | Aug 13',
+      userId: '123'
+    },
+    {
+      icon_profile: 'https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp',
+      text: 'xe tôi cắm rồi',
+      time: '12:00PM | Aug 13',
+      userId: '456'
+    },
+  ])
 
   useEffect(() => {
     socket.emit('join-room', {
-      room: room
+      room: room,
     });
   }, [])
+
+  useEffect(() => {
+    socket.on('chat-message', function(data) {
+      const content = {
+        icon_profile: 'https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp',
+        text: data.msg,
+        time: '12:00PM | Aug 13',
+        userId: data.user_id
+      }
+      setChatContent([...chatContent, content]);
+    });
+  }, [chatContent])
 
   useEffect(() => {
     inputRef.current?.addEventListener('input', (e) => {
@@ -31,9 +73,21 @@ export default function App() {
     }
   }, [])
 
-  const handleOnClickToSendMessage = () => {
-    console.dir(inputRef.current.value)
+  const handleOnSendMessage = () => {
+    if (inputRef.current.value === '') return;
+    socket.emit('chat-message', inputRef.current.value);
+    inputRef.current.value = '';
   }
+
+  const handleOnClickToSendMessage = () => {
+    handleOnSendMessage();
+  }
+
+  useHotKey({
+    cb: handleOnSendMessage,
+    ref: inputRef,
+    key: 'Enter'
+  })
 
   return (
       <MDBContainer fluid className="py-5" style={{ backgroundColor: "#CDC4F9" }}>
@@ -241,45 +295,51 @@ export default function App() {
                         style={{ position: "relative", height: "400px", overflow: "scroll" }}
                         className="pt-3 pe-3"
                     >
-                      <div className="d-flex flex-row justify-content-start">
-                        <img
-                            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
-                            alt="avatar 1"
-                            style={{ width: "45px", height: "100%" }}
-                        />
-                        <div>
-                          <p
-                              className="small p-2 ms-3 mb-1 rounded-3"
-                              style={{ backgroundColor: "#f5f6f7" }}
-                          >
-                            Neque porro quisquam est, qui dolorem ipsum quia dolor
-                            sit amet, consectetur, adipisci velit, sed quia non
-                            numquam eius modi tempora incidunt ut labore et dolore
-                            magnam aliquam quaerat voluptatem.
-                          </p>
-                          <p className="small ms-3 mb-3 rounded-3 text-muted float-end">
-                            12:00 PM | Aug 13
-                          </p>
-                        </div>
-                      </div>
+                      {
+                        chatContent.map((data) => {
+                          if (data.userId !== userId) {
+                            return (
+                                <div className="d-flex flex-row justify-content-start">
+                                  <img
+                                      src={data.icon_profile}
+                                      alt="avatar 1"
+                                      style={{ width: "45px", height: "100%" }}
+                                  />
+                                  <div>
+                                    <p
+                                        className="small p-2 ms-3 mb-1 rounded-3"
+                                        style={{ backgroundColor: "#f5f6f7" }}
+                                    >
+                                      {data.text}
+                                    </p>
+                                    <p className="small ms-3 mb-3 rounded-3 text-muted float-end">
+                                      {data.time}
+                                    </p>
+                                  </div>
+                                </div>
+                            )
+                          }
+                          return (
+                              <div className="d-flex flex-row justify-content-end">
+                                <div>
+                                  <p className="small p-2 me-3 mb-1 text-white rounded-3 bg-primary">
+                                    {data.text}
+                                  </p>
+                                  <p className="small me-3 mb-3 rounded-3 text-muted">
+                                    {data.time}
+                                  </p>
+                                </div>
+                                <img
+                                    src={data.icon_profile}
+                                    alt="avatar 1"
+                                    style={{ width: "45px", height: "100%" }}
+                                />
+                              </div>
+                          )
+                        })
+                      }
 
-                      <div className="d-flex flex-row justify-content-end">
-                        <div>
-                          <p className="small p-2 me-3 mb-1 text-white rounded-3 bg-primary">
-                            Ut enim ad minima veniam, quis nostrum exercitationem
-                            ullam corporis suscipit laboriosam, nisi ut aliquid ex
-                            ea commodi consequatur?
-                          </p>
-                          <p className="small me-3 mb-3 rounded-3 text-muted">
-                            12:00 PM | Aug 13
-                          </p>
-                        </div>
-                        <img
-                            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"
-                            alt="avatar 1"
-                            style={{ width: "45px", height: "100%" }}
-                        />
-                      </div>
+
                     </div>
                     <div className="text-muted d-flex justify-content-start align-items-center pe-3 pt-3 mt-2">
                       <img
