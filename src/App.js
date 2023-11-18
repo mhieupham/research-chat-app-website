@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {
   MDBContainer,
   MDBRow,
@@ -12,61 +12,95 @@ import {
 import { io } from 'socket.io-client';
 import { useHotKey } from "./hooks/useHotKey";
 
-function uuidv4() {
-  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
-      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-  );
-}
-const userId = '123';
-const userName = 'hieu';
-const room = 'chat:123';
+const listChat = [
+  {
+    room: 'chat1',
+    name: 'bee bee',
+    user_id: '1'
+  },
+  {
+    room: 'chat2',
+    name: 'bi',
+    user_id: '2'
+  },
+  {
+    room: 'chat3',
+    name: 'bông',
+    user_id: '3'
+  },
+  {
+    room: 'chat4',
+    name: 'tùng',
+    user_id: '4'
+  },
+];
 
-const socket = io('http://localhost:4000', {
-  auth: {
-    user_id: userId,
-    user_name: userName,
-    room: room,
-  }
-});
-
-export default function App() {
+export default function App(props) {
   const inputRef = useRef();
-  const [chatContent, setChatContent] = useState([
-    {
-      icon_profile: 'https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp',
-      text: 'alo bạn à, tôi mượn xe bạn có chút việc',
-      time: '12:00PM | Aug 13',
-      userId: '123'
-    },
-    {
-      icon_profile: 'https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp',
-      text: 'xe tôi cắm rồi',
-      time: '12:00PM | Aug 13',
-      userId: '456'
-    },
-  ])
+  const [chatContent, setChatContent] = useState([])
+  const [typingPerson, setTypingPerson] = useState({ isTyping: false });
+  const [roomDetail, setRoomDetail] = useState({
+    room: 'chat',
+    name: '',
+    user_id: '-1'
+  });
+  const isTypingBeforeRef = useRef(false);
+
+  const siteUrl = window.location.search;
+  const urlParams = new URLSearchParams(siteUrl);
+
+  const room = roomDetail.room;
+  const userName = urlParams.get('name');
+  const userId = urlParams.get('user_id');
+
+  const socket = useMemo(() => {
+    return io('http://localhost:4000', {
+      auth: {
+        user_id: userId,
+        user_name: userName
+      }
+    })
+  }, [userId, userName]);
 
   useEffect(() => {
     socket.emit('join-room', {
       room: room,
     });
-  }, [])
+  }, [room])
 
   useEffect(() => {
     socket.on('chat-message', function(data) {
+      const d = new Date();
       const content = {
         icon_profile: 'https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp',
         text: data.msg,
-        time: '12:00PM | Aug 13',
+        time: d.toLocaleString(),
         userId: data.user_id
       }
+      console.log(chatContent);
       setChatContent([...chatContent, content]);
     });
+
+    socket.on('typing', function (data) {
+      setTypingPerson({
+        user_id: data.user_id,
+        user_name: data.user_name,
+        isTyping: data.isTyping,
+      })
+    })
   }, [chatContent])
+
+  const sendTypingForSocket = (isTyping) => {
+    if (isTypingBeforeRef.current !== isTyping) {
+      socket.emit('typing', isTyping)
+      isTypingBeforeRef.current = isTyping;
+    }
+  }
 
   useEffect(() => {
     inputRef.current?.addEventListener('input', (e) => {
-      console.log(e.target.value);
+      const isTypingEl = e.target.value.length > 0;
+      sendTypingForSocket(isTypingEl);
     })
     return () => {
       inputRef.current?.removeEventListener('input', () => {})
@@ -77,6 +111,7 @@ export default function App() {
     if (inputRef.current.value === '') return;
     socket.emit('chat-message', inputRef.current.value);
     inputRef.current.value = '';
+    sendTypingForSocket(false);
   }
 
   const handleOnClickToSendMessage = () => {
@@ -88,6 +123,16 @@ export default function App() {
     ref: inputRef,
     key: 'Enter'
   })
+
+  const leftRoom = (data) => {
+    socket.emit('left-room', data)
+  }
+
+  const handleOnChangeChannel = (data) => {
+    leftRoom(roomDetail.room);
+    setRoomDetail(data)
+    setChatContent([]);
+  }
 
   return (
       <MDBContainer fluid className="py-5" style={{ backgroundColor: "#CDC4F9" }}>
@@ -116,176 +161,211 @@ export default function App() {
                           style={{ position: "relative", height: "400px", overflow: "scroll" }}
                       >
                         <MDBTypography listUnStyled className="mb-0">
-                          <li className="p-2 border-bottom">
-                            <a
-                                href="#!"
-                                className="d-flex justify-content-between"
-                            >
-                              <div className="d-flex flex-row">
-                                <div>
-                                  <img
-                                      src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"
-                                      alt="avatar"
-                                      className="d-flex align-self-center me-3"
-                                      width="60"
-                                  />
-                                  <span className="badge bg-success badge-dot"></span>
+                          {listChat.map((data) => {
+                            return (<li className="p-2 border-bottom">
+                              <a
+                                  href="#!"
+                                  className="d-flex justify-content-between"
+                                  onClick={() => {
+                                    handleOnChangeChannel(data);
+                                  }}
+                              >
+                                <div className="d-flex flex-row">
+                                  <div>
+                                    <img
+                                        src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"
+                                        alt="avatar"
+                                        className="d-flex align-self-center me-3"
+                                        width="60"
+                                    />
+                                    <span className="badge bg-success badge-dot"></span>
+                                  </div>
+                                  <div className="pt-1">
+                                    <p className="fw-bold mb-0">{data.name}</p>
+                                    <p className="small text-muted">
+                                      Hello, Are you there?
+                                    </p>
+                                  </div>
                                 </div>
                                 <div className="pt-1">
-                                  <p className="fw-bold mb-0">Marie Horwitz</p>
-                                  <p className="small text-muted">
-                                    Hello, Are you there?
-                                  </p>
+                                  <p className="small text-muted mb-1">Just now</p>
+                                  <span className="badge bg-danger rounded-pill float-end">
+                                    3
+                                  </span>
                                 </div>
-                              </div>
-                              <div className="pt-1">
-                                <p className="small text-muted mb-1">Just now</p>
-                                <span className="badge bg-danger rounded-pill float-end">
-                                3
-                              </span>
-                              </div>
-                            </a>
-                          </li>
-                          <li className="p-2 border-bottom">
-                            <a
-                                href="#!"
-                                className="d-flex justify-content-between"
-                            >
-                              <div className="d-flex flex-row">
-                                <div>
-                                  <img
-                                      src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava2-bg.webp"
-                                      alt="avatar"
-                                      className="d-flex align-self-center me-3"
-                                      width="60"
-                                  />
-                                  <span className="badge bg-warning badge-dot"></span>
-                                </div>
-                                <div className="pt-1">
-                                  <p className="fw-bold mb-0">Alexa Chung</p>
-                                  <p className="small text-muted">
-                                    Lorem ipsum dolor sit.
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-1">
-                                <p className="small text-muted mb-1">
-                                  5 mins ago
-                                </p>
-                                <span className="badge bg-danger rounded-pill float-end">
-                                2
-                              </span>
-                              </div>
-                            </a>
-                          </li>
-                          <li className="p-2 border-bottom">
-                            <a
-                                href="#!"
-                                className="d-flex justify-content-between"
-                            >
-                              <div className="d-flex flex-row">
-                                <div>
-                                  <img
-                                      src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava3-bg.webp"
-                                      alt="avatar"
-                                      className="d-flex align-self-center me-3"
-                                      width="60"
-                                  />
-                                  <span className="badge bg-success badge-dot"></span>
-                                </div>
-                                <div className="pt-1">
-                                  <p className="fw-bold mb-0">Danny McChain</p>
-                                  <p className="small text-muted">
-                                    Lorem ipsum dolor sit.
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-1">
-                                <p className="small text-muted mb-1">Yesterday</p>
-                              </div>
-                            </a>
-                          </li>
-                          <li className="p-2 border-bottom">
-                            <a
-                                href="#!"
-                                className="d-flex justify-content-between"
-                            >
-                              <div className="d-flex flex-row">
-                                <div>
-                                  <img
-                                      src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava4-bg.webp"
-                                      alt="avatar"
-                                      className="d-flex align-self-center me-3"
-                                      width="60"
-                                  />
-                                  <span className="badge bg-danger badge-dot"></span>
-                                </div>
-                                <div className="pt-1">
-                                  <p className="fw-bold mb-0">Ashley Olsen</p>
-                                  <p className="small text-muted">
-                                    Lorem ipsum dolor sit.
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-1">
-                                <p className="small text-muted mb-1">Yesterday</p>
-                              </div>
-                            </a>
-                          </li>
-                          <li className="p-2 border-bottom">
-                            <a
-                                href="#!"
-                                className="d-flex justify-content-between"
-                            >
-                              <div className="d-flex flex-row">
-                                <div>
-                                  <img
-                                      src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava5-bg.webp"
-                                      alt="avatar"
-                                      className="d-flex align-self-center me-3"
-                                      width="60"
-                                  />
-                                  <span className="badge bg-warning badge-dot"></span>
-                                </div>
-                                <div className="pt-1">
-                                  <p className="fw-bold mb-0">Kate Moss</p>
-                                  <p className="small text-muted">
-                                    Lorem ipsum dolor sit.
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-1">
-                                <p className="small text-muted mb-1">Yesterday</p>
-                              </div>
-                            </a>
-                          </li>
-                          <li className="p-2">
-                            <a
-                                href="#!"
-                                className="d-flex justify-content-between"
-                            >
-                              <div className="d-flex flex-row">
-                                <div>
-                                  <img
-                                      src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
-                                      alt="avatar"
-                                      className="d-flex align-self-center me-3"
-                                      width="60"
-                                  />
-                                  <span className="badge bg-success badge-dot"></span>
-                                </div>
-                                <div className="pt-1">
-                                  <p className="fw-bold mb-0">Ben Smith</p>
-                                  <p className="small text-muted">
-                                    Lorem ipsum dolor sit.
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-1">
-                                <p className="small text-muted mb-1">Yesterday</p>
-                              </div>
-                            </a>
-                          </li>
+                              </a>
+                            </li>)
+                          })}
+                          {/*<li className="p-2 border-bottom">*/}
+                          {/*  <a*/}
+                          {/*      href="#!"*/}
+                          {/*      className="d-flex justify-content-between"*/}
+                          {/*  >*/}
+                          {/*    <div className="d-flex flex-row">*/}
+                          {/*      <div>*/}
+                          {/*        <img*/}
+                          {/*            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"*/}
+                          {/*            alt="avatar"*/}
+                          {/*            className="d-flex align-self-center me-3"*/}
+                          {/*            width="60"*/}
+                          {/*        />*/}
+                          {/*        <span className="badge bg-success badge-dot"></span>*/}
+                          {/*      </div>*/}
+                          {/*      <div className="pt-1">*/}
+                          {/*        <p className="fw-bold mb-0">Marie Horwitz</p>*/}
+                          {/*        <p className="small text-muted">*/}
+                          {/*          Hello, Are you there?*/}
+                          {/*        </p>*/}
+                          {/*      </div>*/}
+                          {/*    </div>*/}
+                          {/*    <div className="pt-1">*/}
+                          {/*      <p className="small text-muted mb-1">Just now</p>*/}
+                          {/*      <span className="badge bg-danger rounded-pill float-end">*/}
+                          {/*      3*/}
+                          {/*    </span>*/}
+                          {/*    </div>*/}
+                          {/*  </a>*/}
+                          {/*</li>*/}
+                          {/*<li className="p-2 border-bottom">*/}
+                          {/*  <a*/}
+                          {/*      href="#!"*/}
+                          {/*      className="d-flex justify-content-between"*/}
+                          {/*  >*/}
+                          {/*    <div className="d-flex flex-row">*/}
+                          {/*      <div>*/}
+                          {/*        <img*/}
+                          {/*            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava2-bg.webp"*/}
+                          {/*            alt="avatar"*/}
+                          {/*            className="d-flex align-self-center me-3"*/}
+                          {/*            width="60"*/}
+                          {/*        />*/}
+                          {/*        <span className="badge bg-warning badge-dot"></span>*/}
+                          {/*      </div>*/}
+                          {/*      <div className="pt-1">*/}
+                          {/*        <p className="fw-bold mb-0">Alexa Chung</p>*/}
+                          {/*        <p className="small text-muted">*/}
+                          {/*          Lorem ipsum dolor sit.*/}
+                          {/*        </p>*/}
+                          {/*      </div>*/}
+                          {/*    </div>*/}
+                          {/*    <div className="pt-1">*/}
+                          {/*      <p className="small text-muted mb-1">*/}
+                          {/*        5 mins ago*/}
+                          {/*      </p>*/}
+                          {/*      <span className="badge bg-danger rounded-pill float-end">*/}
+                          {/*      2*/}
+                          {/*    </span>*/}
+                          {/*    </div>*/}
+                          {/*  </a>*/}
+                          {/*</li>*/}
+                          {/*<li className="p-2 border-bottom">*/}
+                          {/*  <a*/}
+                          {/*      href="#!"*/}
+                          {/*      className="d-flex justify-content-between"*/}
+                          {/*  >*/}
+                          {/*    <div className="d-flex flex-row">*/}
+                          {/*      <div>*/}
+                          {/*        <img*/}
+                          {/*            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava3-bg.webp"*/}
+                          {/*            alt="avatar"*/}
+                          {/*            className="d-flex align-self-center me-3"*/}
+                          {/*            width="60"*/}
+                          {/*        />*/}
+                          {/*        <span className="badge bg-success badge-dot"></span>*/}
+                          {/*      </div>*/}
+                          {/*      <div className="pt-1">*/}
+                          {/*        <p className="fw-bold mb-0">Danny McChain</p>*/}
+                          {/*        <p className="small text-muted">*/}
+                          {/*          Lorem ipsum dolor sit.*/}
+                          {/*        </p>*/}
+                          {/*      </div>*/}
+                          {/*    </div>*/}
+                          {/*    <div className="pt-1">*/}
+                          {/*      <p className="small text-muted mb-1">Yesterday</p>*/}
+                          {/*    </div>*/}
+                          {/*  </a>*/}
+                          {/*</li>*/}
+                          {/*<li className="p-2 border-bottom">*/}
+                          {/*  <a*/}
+                          {/*      href="#!"*/}
+                          {/*      className="d-flex justify-content-between"*/}
+                          {/*  >*/}
+                          {/*    <div className="d-flex flex-row">*/}
+                          {/*      <div>*/}
+                          {/*        <img*/}
+                          {/*            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava4-bg.webp"*/}
+                          {/*            alt="avatar"*/}
+                          {/*            className="d-flex align-self-center me-3"*/}
+                          {/*            width="60"*/}
+                          {/*        />*/}
+                          {/*        <span className="badge bg-danger badge-dot"></span>*/}
+                          {/*      </div>*/}
+                          {/*      <div className="pt-1">*/}
+                          {/*        <p className="fw-bold mb-0">Ashley Olsen</p>*/}
+                          {/*        <p className="small text-muted">*/}
+                          {/*          Lorem ipsum dolor sit.*/}
+                          {/*        </p>*/}
+                          {/*      </div>*/}
+                          {/*    </div>*/}
+                          {/*    <div className="pt-1">*/}
+                          {/*      <p className="small text-muted mb-1">Yesterday</p>*/}
+                          {/*    </div>*/}
+                          {/*  </a>*/}
+                          {/*</li>*/}
+                          {/*<li className="p-2 border-bottom">*/}
+                          {/*  <a*/}
+                          {/*      href="#!"*/}
+                          {/*      className="d-flex justify-content-between"*/}
+                          {/*  >*/}
+                          {/*    <div className="d-flex flex-row">*/}
+                          {/*      <div>*/}
+                          {/*        <img*/}
+                          {/*            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava5-bg.webp"*/}
+                          {/*            alt="avatar"*/}
+                          {/*            className="d-flex align-self-center me-3"*/}
+                          {/*            width="60"*/}
+                          {/*        />*/}
+                          {/*        <span className="badge bg-warning badge-dot"></span>*/}
+                          {/*      </div>*/}
+                          {/*      <div className="pt-1">*/}
+                          {/*        <p className="fw-bold mb-0">Kate Moss</p>*/}
+                          {/*        <p className="small text-muted">*/}
+                          {/*          Lorem ipsum dolor sit.*/}
+                          {/*        </p>*/}
+                          {/*      </div>*/}
+                          {/*    </div>*/}
+                          {/*    <div className="pt-1">*/}
+                          {/*      <p className="small text-muted mb-1">Yesterday</p>*/}
+                          {/*    </div>*/}
+                          {/*  </a>*/}
+                          {/*</li>*/}
+                          {/*<li className="p-2">*/}
+                          {/*  <a*/}
+                          {/*      href="#!"*/}
+                          {/*      className="d-flex justify-content-between"*/}
+                          {/*  >*/}
+                          {/*    <div className="d-flex flex-row">*/}
+                          {/*      <div>*/}
+                          {/*        <img*/}
+                          {/*            src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"*/}
+                          {/*            alt="avatar"*/}
+                          {/*            className="d-flex align-self-center me-3"*/}
+                          {/*            width="60"*/}
+                          {/*        />*/}
+                          {/*        <span className="badge bg-success badge-dot"></span>*/}
+                          {/*      </div>*/}
+                          {/*      <div className="pt-1">*/}
+                          {/*        <p className="fw-bold mb-0">Ben Smith</p>*/}
+                          {/*        <p className="small text-muted">*/}
+                          {/*          Lorem ipsum dolor sit.*/}
+                          {/*        </p>*/}
+                          {/*      </div>*/}
+                          {/*    </div>*/}
+                          {/*    <div className="pt-1">*/}
+                          {/*      <p className="small text-muted mb-1">Yesterday</p>*/}
+                          {/*    </div>*/}
+                          {/*  </a>*/}
+                          {/*</li>*/}
                         </MDBTypography>
                       </div>
                     </div>
@@ -338,8 +418,6 @@ export default function App() {
                           )
                         })
                       }
-
-
                     </div>
                     <div className="text-muted d-flex justify-content-start align-items-center pe-3 pt-3 mt-2">
                       <img
@@ -363,6 +441,11 @@ export default function App() {
                       <a className="ms-3" onClick={handleOnClickToSendMessage} href="#!">
                         <MDBIcon fas icon="paper-plane" />
                       </a>
+                    </div>
+                    <div>
+                      {
+                        typingPerson.isTyping && (typingPerson.user_id !== userId) && (`${typingPerson.user_name} is typing....`)
+                      }
                     </div>
                   </MDBCol>
                 </MDBRow>
